@@ -31,7 +31,7 @@ class Worker
       return callback error if error?
       debug 'got result', _.size result
       chunks = _.chunk _.toPairs(result), 100
-      bulkUpdate = async.apply @bulkUpdate, { minute, minuteKey }
+      bulkUpdate = async.apply @bulkUpdate, { minute }
       async.eachSeries chunks, bulkUpdate, callback
     return # avoid returning promise
 
@@ -44,16 +44,16 @@ class Worker
     body = @_getBodyFromResult { result, minute, minuteKey }
     @elasticSearch.bulk { body }, (error) => callback error
 
-  _getBodyFromResult: ({ result, minute, minuteKey }) =>
+  _getBodyFromResult: ({ result, minute }) =>
     items = []
-    index = 'meshblu_stats'
-    type  = 'rate-limit:uuid'
-    debug { minute, minuteKey }
+    index = 'meshblu:stats'
+    type  = 'rate-limit:by-uuid'
     _.each result, ([ uuid, count ]) =>
       count = _.toNumber count
       return debug 'count is not a number' if _.isNaN count
       date = minute * ONE_MIN_IN_MS
-      items.push create: { _index: index, _type: type }
+      id = "#{minute}-#{uuid}"
+      items.push create: { _index: index, _type: type, _id: id }
       items.push { index, type, date, minute, count, uuid }
       return
     return items
