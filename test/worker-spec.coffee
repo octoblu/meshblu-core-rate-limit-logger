@@ -1,7 +1,8 @@
-_       = require 'lodash'
-Redis   = require 'ioredis'
-RedisNS = require '@octoblu/redis-ns'
-Worker  = require '../src/worker'
+_             = require 'lodash'
+Redis         = require 'ioredis'
+debug         = require('debug')('spec:meshblu-core-rate-limit-logger:worker')
+RedisNS       = require '@octoblu/redis-ns'
+Worker        = require '../src/worker'
 
 describe 'Worker', ->
   beforeEach (done) ->
@@ -10,29 +11,43 @@ describe 'Worker', ->
     client.ping (error) =>
       return done error if error?
       client.once 'error', done
-      @client = new RedisNS 'test-worker', client
-      done null
+      client.flushdb (error) =>
+        return done error if error?
+        debug 'redis is ready'
+        @client = new RedisNS 'test-worker', client
+        done null
     return # redis fix
 
   beforeEach ->
     env = {
-      QUEUE_NAME: 'work'
-      QUEUE_TIMEOUT: 1
+      ELASTICSEARCH_URI: "http://localhost:#{0xd00d}"
+      RATE_LIMIT_KEY_PREFIX: 'some-rate-limit-key'
     }
-    @sut = new Worker { @client, env }
+    @elasticSearch = {
+      bulk: sinon.stub().yields null
+    }
+    @sut = new Worker { @client, env, @elasticSearch }
 
   afterEach (done) ->
     @sut.stop done
 
   describe '->do', ->
     beforeEach (done) ->
-      data = JSON.stringify foo: 'bar'
-      @client.lpush 'work', data, done
+      lastMinuteKey = @sut.getLastMinute()
+      debug { lastMinuteKey }
+      @client.hset lastMinuteKey, 'some-test-uuid', 64, done
       return # stupid promises
 
     beforeEach (done) ->
-      @sut.do (error, @data) =>
+      lastMinuteKey = @sut.getLastMinute()
+      debug { lastMinuteKey }
+      @client.hset lastMinuteKey, 'some-other-uuid', 52, done
+      return # stupid promises
+
+    beforeEach (done) ->
+      @sut.do (error) =>
+        debug 'done'
         done error
 
-    it 'should call the callback with data', ->
-      expect(@data).to.deep.equal foo: 'bar'
+    it 'should bulk update in elastic search', ->
+      expect(@elasticSearch.bulk).to.have.been.called

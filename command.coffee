@@ -2,6 +2,7 @@ _              = require 'lodash'
 envalid        = require 'envalid'
 Redis          = require 'ioredis'
 RedisNS        = require '@octoblu/redis-ns'
+{ Client }     = require 'elasticsearch'
 SigtermHandler = require 'sigterm-handler'
 
 Worker         = require './src/worker'
@@ -10,8 +11,8 @@ packageJSON    = require './package.json'
 OPTIONS = {
   REDIS_URI: envalid.str({ devDefault: 'redis://localhost:6379' })
   REDIS_NAMESPACE: envalid.str()
-  QUEUE_NAME: envalid.str()
-  QUEUE_TIMEOUT: envalid.num({ default: 30 })
+  RATE_LIMIT_KEY_PREFIX: envalid.str({ default: 'message-rate:minute' })
+  ELASTICSEARCH_URI: envalid.str({ devDefault: 'http://localhost:9200' })
 }
 
 class Command
@@ -23,7 +24,9 @@ class Command
     @getWorkerClient (error, client) =>
       return @die error if error?
 
-      worker = new Worker { client, @env }
+      elasticSearch = new Client host: @env.ELASTICSEARCH_URI
+
+      worker = new Worker { client, @env, elasticSearch }
       worker.run @die
 
       sigtermHandler = new SigtermHandler { events: ['SIGINT', 'SIGTERM'] }
