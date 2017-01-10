@@ -2,6 +2,8 @@ _     = require 'lodash'
 async = require 'async'
 debug = require('debug')('meshblu-core-rate-limit-logger:worker')
 
+ONE_MIN_IN_MS=60 * 1000
+
 class Worker
   constructor: ({ @client, @elasticSearch, env })->
     { @RATE_LIMIT_KEY_PREFIX } = env
@@ -50,14 +52,14 @@ class Worker
     _.each result, ([ uuid, count ]) =>
       count = _.toNumber count
       return debug 'count is not a number' if _.isNaN count
-      date = minute * 60 * 1000
+      date = minute * ONE_MIN_IN_MS
       items.push create: { _index: index, _type: type }
       items.push { index, type, date, minute, count, uuid }
       return
     return items
 
   getLastMinute: =>
-    currentMinute = Math.floor(Date.now() / (1000*60))
+    currentMinute = Math.floor(Date.now() / ONE_MIN_IN_MS)
     return currentMinute - 1
 
   getLastMinuteKey: (minute) =>
