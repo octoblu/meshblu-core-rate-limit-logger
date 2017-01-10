@@ -48,7 +48,7 @@ class Command
       callback null, client
 
   die: (error) =>
-    return process.exit(0) unless error?
+    return process.exit 0 unless error?
     console.error 'ERROR'
     console.error error.stack
     process.exit 1

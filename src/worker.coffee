@@ -12,7 +12,7 @@ class Worker
     unless @RATE_LIMIT_KEY_PREFIX?
       throw new Error('Worker: requires RATE_LIMIT_KEY_PREFIX')
     if _.endsWith(@RATE_LIMIT_KEY_PREFIX, '-')
-      throw new Error('Worker: RATE_LIMIT_KEY_PREFIX should not end with a "-"')
+      throw new Error('Worker: requires RATE_LIMIT_KEY_PREFIX to not end with "-"')
 
   _doWithNextTick: (callback) =>
     # give some time for garbage collection
@@ -22,14 +22,15 @@ class Worker
           callback error
 
   do: (callback) =>
-    lastMinuteKey = @getLastMinute()
-    debug { lastMinuteKey }
-    @client.hgetall lastMinuteKey, (error, result) =>
+    minute = @getLastMinute()
+    minuteKey = @getLastMinuteKey(minute)
+    debug { minute, minuteKey }
+    @client.hgetall minuteKey, (error, result) =>
       return callback error if error?
-      debug 'got result', result
-      @elasticSearch.bulk result, (error) =>
-        return callback error if error?
-        callback null, result
+      debug 'got result', _.size result
+      chunks = _.chunk _.toPairs(result), 100
+      bulkUpdate = async.apply @bulkUpdate, { minute, minuteKey }
+      async.eachSeries chunks, bulkUpdate, callback
     return # avoid returning promise
 
   run: (callback) =>
@@ -37,10 +38,30 @@ class Worker
       @stopped = true
       callback error
 
+  bulkUpdate: ({ minute, minuteKey }, result, callback) =>
+    body = @_getBodyFromResult { result, minute, minuteKey }
+    @elasticSearch.bulk { body }, (error) => callback error
+
+  _getBodyFromResult: ({ result, minute, minuteKey }) =>
+    items = []
+    index = 'meshblu_stats'
+    type  = 'rate-limit:uuid'
+    debug { minute, minuteKey }
+    _.each result, ([ uuid, count ]) =>
+      count = _.toNumber count
+      return debug 'count is not a number' if _.isNaN count
+      date = minute * 60 * 1000
+      items.push create: { _index: index, _type: type }
+      items.push { index, type, date, minute, count, uuid }
+      return
+    return items
+
   getLastMinute: =>
     currentMinute = Math.floor(Date.now() / (1000*60))
-    lastMinute    = currentMinute - 1
-    return "#{@RATE_LIMIT_KEY_PREFIX}-#{lastMinute}"
+    return currentMinute - 1
+
+  getLastMinuteKey: (minute) =>
+    return "#{@RATE_LIMIT_KEY_PREFIX}-#{minute}"
 
   _shouldStop: =>
     return @stopping == true

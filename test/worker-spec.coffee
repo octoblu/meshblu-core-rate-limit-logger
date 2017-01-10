@@ -1,8 +1,10 @@
-_             = require 'lodash'
-Redis         = require 'ioredis'
-debug         = require('debug')('spec:meshblu-core-rate-limit-logger:worker')
-RedisNS       = require '@octoblu/redis-ns'
-Worker        = require '../src/worker'
+_       = require 'lodash'
+UUID    = require 'uuid'
+async   = require 'async'
+Redis   = require 'ioredis'
+debug   = require('debug')('spec:meshblu-core-rate-limit-logger:worker')
+RedisNS = require '@octoblu/redis-ns'
+Worker  = require '../src/worker'
 
 describe 'Worker', ->
   beforeEach (done) ->
@@ -19,35 +21,82 @@ describe 'Worker', ->
     return # redis fix
 
   beforeEach ->
-    env = {
+    env =
       ELASTICSEARCH_URI: "http://localhost:#{0xd00d}"
       RATE_LIMIT_KEY_PREFIX: 'some-rate-limit-key'
-    }
-    @elasticSearch = {
-      bulk: sinon.stub().yields null
-    }
+    @elasticSearch =
+      bulk: sinon.stub().yields()
     @sut = new Worker { @client, env, @elasticSearch }
 
   afterEach (done) ->
     @sut.stop done
 
   describe '->do', ->
-    beforeEach (done) ->
-      lastMinuteKey = @sut.getLastMinute()
-      debug { lastMinuteKey }
-      @client.hset lastMinuteKey, 'some-test-uuid', 64, done
-      return # stupid promises
+    describe 'when no records exist', ->
+      beforeEach (done) ->
+        @sut.do (error) =>
+          done error
 
-    beforeEach (done) ->
-      lastMinuteKey = @sut.getLastMinute()
-      debug { lastMinuteKey }
-      @client.hset lastMinuteKey, 'some-other-uuid', 52, done
-      return # stupid promises
+      it 'should bulk update in elastic search', ->
+        expect(@elasticSearch.bulk).to.not.have.been.called
 
-    beforeEach (done) ->
-      @sut.do (error) =>
-        debug 'done'
-        done error
+    describe 'when two records exist', ->
+      beforeEach ->
+        @minute = @sut.getLastMinute()
+        @minuteKey = @sut.getLastMinuteKey @minute
+        debug { @minuteKey, @minute }
 
-    it 'should bulk update in elastic search', ->
-      expect(@elasticSearch.bulk).to.have.been.called
+      beforeEach (done) ->
+        @client.hset @minuteKey, 'some-test-uuid', 64, done
+        return # stupid promises
+
+      beforeEach (done) ->
+        @client.hset @minuteKey, 'some-other-uuid', 52, done
+        return # stupid promises
+
+      beforeEach (done) ->
+        @sut.do (error) =>
+          done error
+
+      it 'should bulk update in elastic search', ->
+        expect(@elasticSearch.bulk).to.have.been.calledWith body: [
+          { create: { _index: 'meshblu_stats', _type: 'rate-limit:uuid' } }
+          {
+            count: 64
+            index: 'meshblu_stats'
+            minute: @minute
+            type: 'rate-limit:uuid'
+            uuid: 'some-test-uuid'
+            date: @minute * 60 * 1000
+          }
+          { create: { _index: 'meshblu_stats', _type: 'rate-limit:uuid' } }
+          {
+            count: 52
+            index: 'meshblu_stats'
+            minute: @minute
+            type: 'rate-limit:uuid'
+            uuid: 'some-other-uuid'
+            date: @minute * 60 * 1000
+          }
+        ]
+
+    describe 'when more than a 200 records exist', ->
+      beforeEach ->
+        @minute = @sut.getLastMinute()
+        @minuteKey = @sut.getLastMinuteKey @minute
+        debug { @minuteKey, @minute }
+
+      beforeEach (done) ->
+        keys = []
+        _.times 200, =>
+          keys.push UUID.v1()
+          keys.push _.random(1, 1000)
+        @client.hmset @minuteKey, keys..., done
+        return # redis fix
+
+      beforeEach (done) ->
+        @sut.do (error) =>
+          done error
+
+      it 'should bulk update in elastic search twice', ->
+        expect(@elasticSearch.bulk).to.have.been.called.twice
