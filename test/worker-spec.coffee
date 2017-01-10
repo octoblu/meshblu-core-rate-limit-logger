@@ -61,34 +61,36 @@ describe 'Worker', ->
       it 'should bulk update in elastic search', ->
         expect(@elasticSearch.bulk).to.have.been.calledWith body: [
           {
-            create: {
+            update:
               _index: 'stats:meshblu-rate-limits',
               _type: 'rate-limit:by-uuid',
               _id: "#{@minute}-some-test-uuid"
-            }
           }
           {
-            index: 'stats:meshblu-rate-limits'
-            type: 'rate-limit:by-uuid'
-            date: @minute * 60 * 1000
-            uuid: 'some-test-uuid'
-            minute: @minute
-            count: 64
+            doc_as_upsert: true
+            doc:
+              index: 'stats:meshblu-rate-limits'
+              type: 'rate-limit:by-uuid'
+              date: @minute * 60 * 1000
+              uuid: 'some-test-uuid'
+              minute: @minute
+              count: 64
           }
           {
-            create: {
+            update:
               _index: 'stats:meshblu-rate-limits',
               _type: 'rate-limit:by-uuid',
               _id: "#{@minute}-some-other-uuid"
-            }
           }
           {
-            index: 'stats:meshblu-rate-limits'
-            type: 'rate-limit:by-uuid'
-            date: @minute * 60 * 1000
-            uuid: 'some-other-uuid'
-            minute: @minute
-            count: 52
+            doc_as_upsert: true
+            doc:
+              index: 'stats:meshblu-rate-limits'
+              type: 'rate-limit:by-uuid'
+              date: @minute * 60 * 1000
+              uuid: 'some-other-uuid'
+              minute: @minute
+              count: 52
           }
         ]
 

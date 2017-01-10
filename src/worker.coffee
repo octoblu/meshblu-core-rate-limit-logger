@@ -2,7 +2,7 @@ _     = require 'lodash'
 async = require 'async'
 debug = require('debug')('meshblu-core-rate-limit-logger:worker')
 
-ONE_MIN_IN_MS=60 * 1000
+MINUTE=60 * 1000
 DELAY=10 * 1000
 
 class Worker
@@ -48,7 +48,11 @@ class Worker
 
   bulkUpdate: ({ minute, minuteKey }, result, callback) =>
     body = @_getBodyFromResult { result, minute, minuteKey }
-    @elasticSearch.bulk { body }, callback
+    @elasticSearch.bulk { body }, (error, result) =>
+      debug 'bulk update', { error }
+      return callback error if error?
+      # debug 'bulk update result', JSON.stringify result, null, 2
+      callback null
 
   _getBodyFromResult: ({ result, minute }) =>
     items = []
@@ -57,16 +61,21 @@ class Worker
     _.each result, ([ uuid, count ]) =>
       count = _.toNumber count
       return debug 'count is not a number' if _.isNaN count
-      date = minute * ONE_MIN_IN_MS
+      date = minute * MINUTE
       id = "#{minute}-#{uuid}"
-      items.push create: { _index: index, _type: type, _id: id }
-      items.push { index, type, date, minute, count, uuid }
+      items.push {
+        update: { _index: index, _type: type, _id: id }
+      }
+      items.push {
+        doc: { index, type, date, minute, count, uuid }
+        doc_as_upsert: true,
+      }
       return
     return items
 
   getLastMinute: =>
-    currentMinute = Math.floor(Date.now() / ONE_MIN_IN_MS)
-    return currentMinute - 1
+    currentMinute = Math.floor(Date.now() / MINUTE)
+    return currentMinute - 2
 
   getLastMinuteKey: (minute) =>
     return "#{@RATE_LIMIT_KEY_PREFIX}-#{minute}"
