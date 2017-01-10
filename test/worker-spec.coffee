@@ -62,33 +62,33 @@ describe 'Worker', ->
         expect(@elasticSearch.bulk).to.have.been.calledWith body: [
           {
             create: {
-              _index: 'meshblu:stats',
+              _index: 'stats:meshblu-rate-limits',
               _type: 'rate-limit:by-uuid',
               _id: "#{@minute}-some-test-uuid"
             }
           }
           {
-            count: 64
-            index: 'meshblu:stats'
-            minute: @minute
+            index: 'stats:meshblu-rate-limits'
             type: 'rate-limit:by-uuid'
-            uuid: 'some-test-uuid'
             date: @minute * 60 * 1000
+            uuid: 'some-test-uuid'
+            minute: @minute
+            count: 64
           }
           {
             create: {
-              _index: 'meshblu:stats',
+              _index: 'stats:meshblu-rate-limits',
               _type: 'rate-limit:by-uuid',
               _id: "#{@minute}-some-other-uuid"
             }
           }
           {
-            count: 52
-            index: 'meshblu:stats'
-            minute: @minute
+            index: 'stats:meshblu-rate-limits'
             type: 'rate-limit:by-uuid'
-            uuid: 'some-other-uuid'
             date: @minute * 60 * 1000
+            uuid: 'some-other-uuid'
+            minute: @minute
+            count: 52
           }
         ]
 
