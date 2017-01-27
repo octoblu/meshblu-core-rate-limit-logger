@@ -64,12 +64,9 @@ class Worker
       date = minute * MINUTE
       id = "#{minute}-#{uuid}"
       items.push {
-        update: { _index: index, _type: type, _id: id }
+        create: { _index: index, _type: type, _id: id }
       }
-      items.push {
-        doc: { index, type, date, minute, count, uuid }
-        doc_as_upsert: true,
-      }
+      items.push { index, type, date, minute, count, uuid }
       return
     return items
 
