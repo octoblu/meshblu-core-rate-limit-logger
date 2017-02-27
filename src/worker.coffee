@@ -64,7 +64,7 @@ class Worker
       date = minute * MINUTE
       id = "#{minute}-#{uuid}"
       items.push {
-        create: { _index: index, _type: type, _id: id }
+        index: { _index: index, _type: type, _id: id }
       }
       items.push { index, type, date, minute, count, uuid }
       return
